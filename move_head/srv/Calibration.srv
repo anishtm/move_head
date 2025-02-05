@@ -1,0 +1,15 @@
+# Calibration.srv
+
+# Request:
+bool calibrate            # Request to start calibration (true/false)
+int16 left_end = 0         # The leftmost position
+int16 right_end = 580       # The rightmost position (e.g., scaled for `int8`)
+int16 upright_position = 90 # The upright position (e.g., 90 as 9 for simplification)
+int16 upper_max = 100       # Upper max limit (scaled for `int8`)
+int16 lower_max = 80        # Lower max limit (scaled for `int8`)
+
+---
+# Response:
+bool calibrated           # Whether the calibration was successful (true/false)
+int16 current_position     # Current position after calibration (e.g., upright_position or adjusted)
+int16 current_angle

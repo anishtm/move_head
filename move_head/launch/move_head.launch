@@ -1,0 +1,23 @@
+<launch>
+    <!-- Default Arguments -->
+    <arg name="serial_port_person" default="/dev/ttyACM0" />
+    <arg name="serial_port_motor" default="/dev/ttyACM1" />
+
+    <!-- Serial Node -->
+    <param name="rosserial_node/serial_port" value="$(arg serial_port_person)" />
+
+    <!-- Arduino Commander -->
+    <param name="arduino_commander/serial_port" value="$(arg serial_port_motor)" />
+
+    <!-- Nodes -->
+    <node name="rosserial_node" pkg="rosserial_arduino" type="serial_node.py" output="screen">
+        <param name="serial_port" value="$(arg serial_port_person)" />
+    </node>
+    
+    <node name="arduino_commander" pkg="move_head" type="arduino_commander.py" output="screen">
+        <param name="serial_port" value="$(arg serial_port_motor)" />
+    </node>
+
+    <node name="head_controller" pkg="move_head" type="head_controller.py" output="screen">
+    </node>
+</launch>
