@@ -128,6 +128,16 @@ void move_center(){
   move_to_position(center);
 }
 
+
+void sinusoidalSmoothing(int startAngle, int endAngle, int steps) {
+  for (int step = 0; step <= steps; step++) {
+    float t = (float)step / steps;
+    int angle = startAngle + (endAngle - startAngle) * (1 - cos(t * PI)) / 2; // Sinusoidal easing
+    myServo.write(angle);
+    delay(20); // Adjust delay for speed control
+  }
+}
+
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);      // Set the built-in LED pin as output
   
