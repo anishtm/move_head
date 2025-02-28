@@ -1,0 +1,34 @@
+<launch>
+  <!-- Launch roscore (this is typically launched separately but can be included here) -->
+  <node name="roscore" pkg="roscore" type="roscore" />
+
+  <!-- Set default values for head_device and jaw_device -->
+  <arg name="head_device" default="/dev/ttyACM0" />
+  <arg name="jaw_device" default="/dev/ttyACM1" />
+  <arg name="head_baud" default="115200" />
+  <arg name="jaw_baud" default="115200" />
+
+  <!-- Launch rosserial_arduino for head control -->
+  <node name="head" pkg="rosserial_arduino" type="serial_node.py"
+        args="$(arg head_device) _baud:=$(arg head_baud)" output="screen" />
+
+  <!-- Launch rosserial_arduino for jaw control (currently disabled) -->
+  <!-- 
+  <node name="jaw" pkg="rosserial_arduino" type="serial_node.py"
+        args="$(arg jaw_device) $(arg jaw_baud)" output="screen" />
+  -->
+
+  <!-- Launch live feed script -->
+  <node name="live_feed" pkg="move_head" type="live_feed.py" output="screen" />
+
+  <!-- Launch detector with the visualization flag -->
+  <arg name="visualize" default="True" />
+  <group if="$(arg visualize)">
+    <node name="face_tracking_node" pkg="move_head" type="detector_final.py" output="screen" />
+  </group>
+  
+  <!-- Launch detector without visualization -->
+  <group unless="$(arg visualize)">
+    <node name="face_tracking_node_without_visualization" pkg="move_head" type="detector_without_visualization.py" output="screen" />
+  </group>
+</launch>
