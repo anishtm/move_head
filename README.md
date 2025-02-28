@@ -57,15 +57,16 @@ The following actions are supported by the system:
 
 ## Arduino Sketches
 
-There are three main Arduino sketches used in this system, each subscribing to the `/commands` topic:
+There are two main Arduino sketches used in this system, to move head and for jaw movement:
 
+- **`ros_controller_final.ino`**: Controls motor movement without publishing any commands.
+- **`jaw_controller.ino`**: Subscribes to both `/voice`. The jaw only moves when a valid command is received on `/voice`.
+
+
+Additionally, there are two sketches for debugging:
 - **`message_checker.ino`**: Verifies that messages are being received correctly.
 - **`ros_controller_almost.ino`**: Publishes commands and manages motor control.
-- **`ros_controller_final.ino`**: Controls motor movement without publishing any commands.
 
-Additionally, there is a dedicated sketch for jaw movement:
-
-- **`jaw_controller.ino`**: Subscribes to both `/voice` and `/commands`. The jaw only moves when a valid command is received on `/commands`.
 
 For eye movement, the servos will only move when a **centering command** is received through the `/commands` topic.
 
