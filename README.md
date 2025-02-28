@@ -1,134 +1,145 @@
-This a package to move robotic head of humanoid robot  "Kanchii" developed by Robotics Association Nepal (RAN).
+# move_head: ROS Package for Humanoid Head Movement
 
-This package contains 4
+`move_head` is a ROS package built on ROS Noetic. It allows control of a humanoid head with movement along two axes: **pan** (X-axis) using a Nema 17 stepper motor and **tilt** (Y-axis) using a 25kg servo motor. The system also includes smaller servos for eye movement and a jaw movement servo.
 
-1. Arduino Head Controller - Controls stepper and servo for pan and tilt using serial communication
-2. Arduino People Jaw - Receives data from people sensor about human detection and controls jaw for mouth movement using ROS Noetic.
-3. Arduino Commander - Python node used to give commands to arduino connected through serial communication
-4. Controller - It gives actual commands on what to do how to control the motors. It publishes topic for arduino_commander which then commands to arduino
+---
 
-To control the head
-1. Flash arduino with Arduino head controller
-2. Flash arduino mega with arduino people jaw - uno doesnt work de to memory issues, esp32 doesnt work due to servo.h issues
-3. connect both to the host ros machines
-4. find the arduino physical location usually /dev/ttyACM0 and /dev/ttyACM1 for arduino and /dev/ttyUSB0 for esp32
-5. start ros: roscore
-6. start arduino commander : rosrun move_head arduin_commander.py _serial_port:= "/dev/ttyACM1" if its ACM0 it is by default the
-7. start arduino people jaw: rosrun rosserial_arduino serial_node.py /dev/ttyACM0
-8. start controller: rosrun move_head controller.py
+## Setup Instructions
 
+### 1. Create ROS Workspace
 
-now if you want to use conversation capabilties, you need to get kaanchii_ai package developed by Er. Tejash Katwal at RAN
+To create the `move_head` package, follow the normal ROS workspace creation procedure:
 
+```bash
+cd ~/catkin_ws/src
+git clone https://github.com/anishtm/move_head.git
+cd ..
+catkin_make clean
+catkin_make
+```
 
-note this work is incomplete. It is just for the sake so that it makes when i read it after few months
+ROS Noetic is used despite nearing its LTS end due to the inclusion of the **rosserial** package, which is required for communication with Arduino. Although two Arduino boards (Uno and Mega) are used for logistical and PCB issues, a single Arduino Mega could suffice for this operation.
 
+---
 
-#!/bin/bash
+## Homing Sequence for Head Movement
 
-# Function to check if rosserial_arduino connects successfully
-check_serial_connection() {
-    local port=$1
-    echo "Checking connection on $port..."
-    rosrun rosserial_arduino serial_node.py "$port" &> /tmp/rosserial_output.log &
-    local pid=$!
-    sleep 5  # Give it time to connect
-    kill $pid  # Kill the process after checking
+### Servo Homing:
+- **Default upright position**: 84 degrees
+- **Upper max angle**: 64 degrees
+- **Lower max angle**: 100 degrees
 
-    if grep -q "Unable to sync with device" /tmp/rosserial_output.log; then
-        echo "Failed to connect on $port"
-        return 1
-    elif grep -q "Setup publisher on" /tmp/rosserial_output.log; then
-        echo "Successfully connected on $port"
-        return 0
-    else
-        echo "Unknown response on $port"
-        return 1
-    fi
-}
+### Stepper Homing:
+- There are two limit switches at each end of the stepper's range.
+  - **Left switch**: Assigned as position 0.
+  - **Right switch**: Normal position at approximately 4670 ± 10 steps (as indicated by `AccelStepper.currentPosition()`).
 
-# Detect available ports
-PORT1="/dev/ttyACM0"
-PORT2="/dev/ttyACM1"
-SELECTED_PORT=""
+### Homing Process:
+1. The system starts at the default upright position of 84°.
+2. The head is moved left until the left limit switch is triggered.
+3. The head is then moved slightly right, and once the right limit switch is triggered, the position is set to 0.
+4. This process is performed using an **Arduino Uno** and publishes `geometry_msgs/Point32` on the `/commands` topic for communication. The `x` value represents the stepper position, the `y` value represents the angle, and the `z` value indicates the action type.
 
-# Try the first port
-check_serial_connection "$PORT1"
-if [ $? -eq 0 ]; then
-    SELECTED_PORT="$PORT1"
-else
-    check_serial_connection "$PORT2"
-    if [ $? -eq 0 ]; then
-        SELECTED_PORT="$PORT2"
-    else
-        echo "No valid serial connection found. Exiting..."
-        exit 1
-    fi
-fi
+---
 
-# Start roscore
-echo "Starting roscore..."
-roscore & 
-sleep 5  # Wait for roscore to initialize
+## Action Types
 
-# Start move_head Arduino commander
-echo "Starting move_head arduin_commander.py on $SELECTED_PORT..."
-rosrun move_head arduin_commander.py _serial_port:="$SELECTED_PORT" &
-sleep 3  # Allow some time to initialize
+The following actions are supported by the system:
 
-# Start rosserial_arduino
-echo "Starting rosserial_arduino on $SELECTED_PORT..."
-rosrun rosserial_arduino serial_node.py "$SELECTED_PORT" &
-sleep 3
+- **0**: Calibration
+- **1**: Move to center
+- **2**: Move to angle
+- **3**: Move to position (Stepper)
+- **4**: Move to both angle and position simultaneously
+- **5**: Move to both angle and position, one at a time
 
-# Start move_head controller
-echo "Starting move_head controller.py..."
-rosrun move_head controller.py &
-sleep 3
+---
 
-# Start kaanchii_ai
-echo "Starting kaanchii_ai..."
-rosrun kaanchii_ai kaanchii_ai.py &
+## Arduino Sketches
 
-echo "All processes started successfully!"
+There are three main Arduino sketches used in this system, each subscribing to the `/commands` topic:
 
+- **`message_checker.ino`**: Verifies that messages are being received correctly.
+- **`ros_controller_almost.ino`**: Publishes commands and manages motor control.
+- **`ros_controller_final.ino`**: Controls motor movement without publishing any commands.
 
-i want to create a file that 1. starts a roscore
+Additionally, there is a dedicated sketch for jaw movement:
 
-2. then rosrun move_head arduin_commander.py _serial_port:= "/dev/ttyACM0"
+- **`jaw_controller.ino`**: Subscribes to both `/voice` and `/commands`. The jaw only moves when a valid command is received on `/commands`.
 
-3. then runs rosrun rosserial_arduino serial_node.py /dev/ttyACM1 
+For eye movement, the servos will only move when a **centering command** is received through the `/commands` topic.
 
-4. then rosrun move_head controller.py
+---
 
-5. then rosrun kaanchii_ai kaanchii_ai.py 
+## Python Nodes
 
-it may be bash file
-it may be python file
+The package also includes Python nodes for face detection and tracking using **Yunet** and the **SORT** tracking algorithm:
 
-but it has to run on start up on ubuntu 20 and it should be able to see list of port address like /dev/ttyACM0 and ACM1, 
+- **`live_feed.py`**: Captures images from the webcam.
+- **`detector.py`**: Detects faces, sends movement commands, and visualizes the process.
+- **`detector_without_visualization.py`**: Similar to `detector.py`, but without the visualization.
 
-first it should run 3. if it is correct it should show this
-vboxuser@Ubuntu:~$ rosrun rosserial_arduino serial_node.py /dev/ttyACM0
-[INFO] [1739086646.983785]: ROS Serial Python Node
-[INFO] [1739086646.992316]: Connecting to /dev/ttyACM0 at 57600 baud
-[INFO] [1739086649.114027]: Requesting topics...
-[INFO] [1739086649.157318]: Note: publish buffer size is 512 bytes
-[INFO] [1739086649.159285]: Setup publisher on face_detection [move_head/Face]
-[INFO] [1739086649.164887]: Note: subscribe buffer size is 512 bytes
-[INFO] [1739086649.166376]: Setup subscriber on /voice [std_msgs/String]
-[INFO] [1739086649.422126]: No faces detected
-[INFO] [1739086649.920068]: No faces detected
-[INFO] [1739086650.421165]: No faces detected
+There is also a debugging node that publishes manual commands to the Arduino.
 
-if is wrong it should show this
-vboxuser@Ubuntu:~$ rosrun rosserial_arduino serial_node.py /dev/ttyACM0
-[INFO] [1739086670.642302]: ROS Serial Python Node
-[INFO] [1739086670.648244]: Connecting to /dev/ttyACM0 at 57600 baud
-[INFO] [1739086672.761604]: Requesting topics...
-[ERROR] [1739086687.764509]: Unable to sync with device; possible link problem or link software version mismatch such as hydro rosserial_python with groovy Arduino
+---
 
-then choose the other one
+## Voice Topic
 
+The **voice topic** is managed by another node, which is beyond the scope of this README.
 
-and the host machine has username and password, can i set it up so that, on start up it enters its username and password, starts up the file ??
+---
+
+## Starting the System
+
+1. Start the ROS master:
+   ```bash
+   roscore
+   ```
+
+2. Run the live feed node:
+   ```bash
+   rosrun move_head live_feed.py
+   ```
+
+3. Run the face detection and tracking node (with or without visualization):
+   ```bash
+   rosrun move_head detector.py
+   # or
+   rosrun move_head detector_without_visualization.py
+   ```
+
+4. Launch the Arduino serial nodes for head and jaw movement:
+   ```bash
+   rosrun rosserial_arduino serial_node.py __name:=head /dev/ttyACM0 _baud:=115200
+   rosrun rosserial_arduino serial_node.py __name:=jaw /dev/ttyACM1 _baud:=115200
+   ```
+
+   **Note:** Make sure the **head movement Arduino** is connected to `/dev/ttyACM0` and the **jaw movement Arduino** is connected to `/dev/ttyACM1`.
+
+---
+
+## Calibration
+
+If the calibration doesn't start automatically, you can manually trigger it with the following command:
+
+```bash
+rostopic pub /commands geometry_msgs/Point32 "x: 0 y: 0 z: 0"
+```
+
+---
+
+## Optional: Run the AI Node
+
+You can also run the optional AI node if available:
+
+```bash
+rosrun kaanchii_ai kaanchii_ai.py
+```
+
+---
+
+## Disclaimer
+
+This README is intended to serve as a reminder for setting up and working with this project. The setup process and code are specific to the current version and may require adjustments for future updates.
+
+---
